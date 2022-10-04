@@ -16,4 +16,4 @@ add_custom_target(
         "Running buffer tests..."
     )
 
-add_subdirectory(file_rdr_wrtr)
+add_subdirectory(io)

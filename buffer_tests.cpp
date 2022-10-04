@@ -59,7 +59,7 @@ void test_2()
     *(strings + 2) = str_3;
 
     auto str_len = sizeof(str_1);
-    assert(str_len == sizeof(str_2) & str_len == sizeof(str_3));
+    assert(str_len == sizeof(str_2) && str_len == sizeof(str_3));
 
     auto array_size = 3;
 
