@@ -57,15 +57,21 @@ bool Poller::RemoveFd(int fd)
 
 void Poller::Run()
 {
-    auto events = poll(fds_, size_, -1);
-    if (events == -1)
-    {
-        perror("poll returned");
-        return;
-    }
-
     while(true)
     {
+        auto events = poll(fds_, size_, timeout_);
+        if (events == -1)
+        {
+            perror("poll returned");
+            return;
+        }
+        else if (events == 0)
+        {
+            if (on_timeout)
+                on_timeout();
+            return;
+        }
+
         for (int i = 0; i < size_ && events > 0; i++)
         {
             auto* pfd = (fds_ + i);
