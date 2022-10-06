@@ -5,14 +5,17 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <signal.h>
-#include "../buffer.h"
+#include <fcntl.h>
+#include <poll.h>
+#include "../../buffer.h"
+#include "server.h"
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
 int server_fd, socket_fd = -1;
 
-void signal_handler(int signal)
+void clean_exit(int exit_status)
 {
     if (socket_fd >= 0 && close(socket_fd) != 0)
         perror("couldn't close socket");
@@ -20,7 +23,13 @@ void signal_handler(int signal)
     if (server_fd >= 0 && shutdown(server_fd, SHUT_RDWR) != 0)
         perror("couldn't shutdown server");
 
+    exit(exit_status);
+}
+
+void signal_handler(int signal)
+{
     printf("singal caught(%d)", signal);
+    clean_exit(EXIT_FAILURE);
 }
 
 int main(int argc, char const* argv[])
@@ -37,13 +46,18 @@ int main(int argc, char const* argv[])
 		exit(EXIT_FAILURE);
 	}
 
+    if (fcntl(server_fd, F_SETFD, O_NONBLOCK) == -1)
+    {
+        perror("couldn't set non-blocking flag");
+        clean_exit(EXIT_FAILURE);
+    }
+
     sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(PORT);
     int addrlen = sizeof(address);
 
-	// Forcefully attaching socket to the port 8080
 	if (bind(server_fd, (sockaddr*)&address, sizeof(address)) < 0)
     {
 		perror("bind failed");
@@ -74,8 +88,7 @@ int main(int argc, char const* argv[])
         buffer.Clear();
     }	
 
-	close(socket_fd);
+    clean_exit(EXIT_SUCCESS);
 
-	shutdown(server_fd, SHUT_RDWR);
 	return 0;
 }

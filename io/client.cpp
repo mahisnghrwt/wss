@@ -16,6 +16,7 @@ void signal_handler(int signal)
     if (client_fd >= 0 && close(client_fd) != 0)
         perror("");
     printf("singal caught(%d)", signal);
+    exit(EXIT_FAILURE);
 }
 
 void connect_to_server()
@@ -85,5 +86,8 @@ int main(int argc, char const* argv[])
 
 	// closing the connected socket
 	close(client_fd);
+
+    exit(EXIT_SUCCESS);
+
 	return 0;
 }
