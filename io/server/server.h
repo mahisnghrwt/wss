@@ -1,10 +1,17 @@
 #pragma once
 
-#include "../../buffer.h"
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "../poller.h"
+#include "../fd_desc.h"
+#include "../../buffer.h"
 #include <cstdint>
 #include <poll.h>
 #include <vector>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 namespace wss {
 
@@ -16,27 +23,42 @@ struct ClientDesc
     bool eof_received;
 };
 
-class Server
+class Server : public Poller
 {
 public:
     static const constexpr std::size_t BUFFER_SIZE = 1024;
 
     Server(int port, std::size_t connection_backlog, std::size_t max_connections)
-        : port_(port)
+        : Poller(max_connections)
+        , port_(port)
         , connection_backlog_(connection_backlog)
         , server_fd_(-1)
         , buffer_(BUFFER_SIZE)
-        , client_counter_(0)
-        , max_connections_(max_connections)
-        , poller_(max_connections)
-        , shutdown_timer_enabled_(false)
+        , is_ok_(true)
     {
         init();
     }
 
-    void init();
+    ~Server()
+    {
+        Shutdown();
+    }
+
+    bool is_ok() const { return is_ok_; }
+
     void Run();
-    void Shutdown(int exit_status);
+
+   /*
+    *   REGISTER WITH SIGNAL HANDLER
+    *   Shutdown
+    *       for all client_fd:
+    *           Poller::OnEOF(client_fd)
+    *       Poller::OnEOF(server_fd)
+    */
+    void Shutdown();
+
+private:
+    void init();
 
     /* 
     *   OnRead
@@ -45,6 +67,7 @@ public:
     *       if client_fd
     *           OnClientData       
     */
+    void OnRead(std::int32_t fd) override;
 
    /* 
     *   OnNewConnection
@@ -54,6 +77,7 @@ public:
     *       set O_NONBLOCK flag on client_socket
     *       AddFd for polling
     */
+    void OnNewConnection();
 
    /*
     *   OnClientData
@@ -63,11 +87,13 @@ public:
     *       else
     *           check for other errors?     
     */
+    void OnClientData(std::int32_t fd);
 
    /*
     *   OnWrite
     *       return
     */
+    void OnWrite(std::int32_t fd) override {}
 
    /*
     *   OnHangup
@@ -76,14 +102,7 @@ public:
     *       else:
     *           Poller::OnHangup()
     */
-
-   /*
-    *   OnEOF:
-    *       if server_fd:
-    *           NOT_POSSIBLE
-    *       else:
-    *           Poller::EOF
-    */
+    void OnHangup(std::int32_t fd) override;
 
    /*
     *   OnPollnval:
@@ -92,33 +111,14 @@ public:
     *       else:
     *           Poller::OnPollnval
     */
+    void OnPollnval(std::int32_t fd) override;
 
-   /*
-    *   REGISTER WITH SIGNAL HANDLER
-    *   Shutdown
-    *       for all client_fd:
-    *           Poller::OnEOF(client_fd)
-    *       Poller::OnEOF(server_fd)
-    */
-
-private:
-    void HandleReadAvailable(int client_fd);
-    void HandleWriteAvailable(int client_fd);
-    void HandleNewConnection();
-    void HandleHangup(int client_fd, short flags);
-    void HandleUnexpectedEvent(int client_fd, short flags);
-    void HandleTimeout();
-    
-private:
     const std::int32_t port_;
     const std::size_t connection_backlog_;
     std::int32_t server_fd_;
     Buffer buffer_;
-    std::vector<ClientDesc> clients_;
-    std::size_t client_counter_;
-    std::size_t max_connections_;
-    Poller poller_;
-    bool shutdown_timer_enabled_;
+    bool is_ok_;
+    sockaddr_in address_;
 };
 
 }

@@ -29,15 +29,21 @@ bool Poller::AddFd(int fd, Event event)
 
 bool Poller::RemoveFd(int fd)
 {
+    if (unsafe_to_remove_fd_)
+    {
+        fd_pending_removal_.emplace_back(fd);
+        return false;
+    }
     for (auto fds_it = fds_.begin(); fds_it != fds_.end(); ++fds_it)
     {
         if (fds_it->fd == fd)
         {
             fds_.erase(fds_it);
-            return true;
+            break;
         }
     }
-    return false;
+    fd_store_->Remove(fd);
+    return true;
 }
 
 void Poller::Run()
@@ -46,15 +52,15 @@ void Poller::Run()
     {
         auto events = poll(fds_.data(), fds_.size(), timeout_);
         if (utils::pperror(events))
-        {
             return;
-        }
+            
         else if (events == 0)
         {
             OnTimeout();
             return;
         }
 
+        unsafe_to_remove_fd_ = true;
         for (auto it = fds_.begin(); it != fds_.end() && events > 0; ++it)
         {
             auto& pfd = *it;
@@ -85,6 +91,13 @@ void Poller::Run()
                 --events;
             }
         }
+
+        unsafe_to_remove_fd_ = false;
+        while(!fd_pending_removal_.empty())
+        {
+            RemoveFd(fd_pending_removal_.back());
+            fd_pending_removal_.pop_back();
+        }
     }
 }
 
@@ -103,7 +116,7 @@ void Poller::OnHangup(std::int32_t fd)
     {
         desc->state = PollfdDesc::CLOSED;
         close(fd);
-        fd_store_->Remove(fd);
+        RemoveFd(fd);
     }
 }
 
@@ -125,10 +138,7 @@ void Poller::OnEOF(std::int32_t fd)
     }
 
     utils::pperror(close(fd));
-  
     RemoveFd(fd);
-
-    fd_store_->Remove(fd);
 }
 
 void Poller::OnPollnval(std::int32_t fd)
@@ -136,7 +146,6 @@ void Poller::OnPollnval(std::int32_t fd)
     auto* desc = fd_store_->Get(fd);
     utils::pperror(close(fd));
     RemoveFd(fd);
-    fd_store_->Remove(fd);
 }
 
 void Poller::OnPollerr(std::int32_t fd)

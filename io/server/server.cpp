@@ -1,94 +1,124 @@
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <poll.h>
-#include "../../buffer.h"
 #include "server.h"
+#include "../../utils.h"
+#include <fcntl.h>
+#include <netinet/ip.h>
+#include <unistd.h>
 
-#define PORT 8080
-#define BUFFER_SIZE 1024
+namespace wss {
 
-int server_fd, socket_fd = -1;
-
-void clean_exit(int exit_status)
+void Server::init()
 {
-    if (socket_fd >= 0 && close(socket_fd) != 0)
-        perror("couldn't close socket");
-
-    if (server_fd >= 0 && shutdown(server_fd, SHUT_RDWR) != 0)
-        perror("couldn't shutdown server");
-
-    exit(exit_status);
-}
-
-void signal_handler(int signal)
-{
-    printf("singal caught(%d)", signal);
-    clean_exit(EXIT_FAILURE);
-}
-
-int main(int argc, char const* argv[])
-{
-    signal(SIGINT, signal_handler);
-
-    Buffer buffer(BUFFER_SIZE);
-
-	// Creating socket file descriptor
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (server_fd < 0)
+    server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (utils::pperror(server_fd_, "=> error creating socket"))
     {
-		perror("socket failed");
-		exit(EXIT_FAILURE);
-	}
-
-    if (fcntl(server_fd, F_SETFD, O_NONBLOCK) == -1)
-    {
-        perror("couldn't set non-blocking flag");
-        clean_exit(EXIT_FAILURE);
+        is_ok_ = false;
+        return;
     }
 
-    sockaddr_in address;
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(PORT);
-    int addrlen = sizeof(address);
-
-	if (bind(server_fd, (sockaddr*)&address, sizeof(address)) < 0)
+    if (utils::pperror(fcntl(server_fd_, F_SETFD, O_NONBLOCK), "=> couldn't set non-blocking flag on server's socket"))
     {
-		perror("bind failed");
-		exit(EXIT_FAILURE);
-	}
-	
-    if (listen(server_fd, 3) < 0)
+        is_ok_ = false;
+        if (utils::pperror(close(server_fd_), "=> error closing server fd"))
+            return;
+    }
+
+    address_.sin_family = AF_INET;
+    address_.sin_addr.s_addr = INADDR_ANY;
+    address_.sin_port = htons(port_);
+
+    if (utils::pperror(bind(server_fd_, (sockaddr*)&address_, sizeof(address_)), "=> couldn't bind the socket"))
     {
-		perror("listen");
-		exit(EXIT_FAILURE);
-	}
-
-    printf("listening for new connections\n");
-	
-    socket_fd = accept(server_fd, (sockaddr*)&address, (socklen_t*)&addrlen);
-    if (socket_fd < 0)
+        is_ok_ = false;
+        if (utils::pperror(close(server_fd_), "=> error closing server fd"))
+            return;
+    }
+    
+    if (utils::pperror(listen(server_fd_, connection_backlog_), "=> couldn't listen on socket"))
     {
-		perror("accept");
-		exit(EXIT_FAILURE);
-	}
+        is_ok_ = false;
+        if (utils::pperror(close(server_fd_), "=> error closing server fd"))
+            return;
+    }
 
-    printf("client connected\n");
+    printf("=> listening for new connections\n");
 
-    while(true)
+    AddFd(server_fd_, Poller::Event::READ);
+}
+
+void Server::Run()
+{
+    if (!is_ok_) return;
+    Poller::Run();
+}
+
+void Server::Shutdown()
+{
+    printf("=> shutting down server\n");
+
+    for (std::size_t i = 0; i < fds_.size();)
     {
-        int valread = read(socket_fd, buffer.head(), BUFFER_SIZE);
-	    printf("%s\n", buffer.data());
-        buffer.Clear();
-    }	
+        const auto size_before = fds_.size();
 
-    clean_exit(EXIT_SUCCESS);
+        if (fds_[i].fd != server_fd_)
+            OnEOF(fds_[i].fd);
 
-	return 0;
+        if (size_before == fds_.size())
+            ++i;
+    }
+
+    OnEOF(server_fd_);
+
+    is_ok_ = false;
+}
+
+void Server::OnRead(std::int32_t fd)
+{
+    if (fd == server_fd_)
+        OnNewConnection();
+    else
+        OnClientData(fd);
+}
+
+void Server::OnNewConnection()
+{
+    socklen_t addrlen = sizeof(address_);
+    auto client_fd = accept4(server_fd_, (sockaddr*)&address_, &addrlen, SOCK_NONBLOCK);
+    if (!utils::pperror(client_fd, "=> error accpeting a new connections"))
+    {
+        printf("=> new client connected\n");
+        AddFd(client_fd, Poller::Event::READ);
+    }    
+}
+
+void Server::OnClientData(std::int32_t client_fd)
+{
+    auto bytes_read = read(client_fd, buffer_.head(), buffer_.cap_available());
+    utils::pperror(bytes_read, "=> error reading from a client fd");
+    if (bytes_read == 0)
+    {
+        OnEOF(client_fd);
+    }
+    else if (bytes_read > 0)
+    {
+        printf("=> data:\n\t%s", buffer_.data());
+    }
+    buffer_.Clear();
+}
+
+void Server::OnHangup(std::int32_t fd)
+{
+    if (fd == server_fd_)
+        Shutdown();
+    else
+        Poller::OnHangup(fd);
+}
+
+void Server::OnPollnval(std::int32_t fd)
+{
+    if (fd == server_fd_)
+        Shutdown();
+    else
+        Poller::OnPollnval(fd);
+}
+
 }

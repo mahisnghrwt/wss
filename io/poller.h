@@ -24,13 +24,15 @@ public:
         READ_WRITE = 0b11
     };
 
-    template<typename FdStoreT>
     Poller(std::size_t nfds)
         : capacity_(nfds)
         , timeout_(-1)
+        , unsafe_to_remove_fd_(false)
     {
-        fd_store_ = std::make_unique<FdStoreT>();
+        fd_store_ = std::make_unique<PollfdStore>();
     }
+
+    virtual ~Poller() {}
 
     // close all fds_  in destructor
 
@@ -41,7 +43,6 @@ public:
     void set_timeout(int32_t timeout) { timeout_ = timeout; }
 
 protected:
-    // IF EOF -> OnEOF
     virtual void OnRead(std::int32_t fd) = 0;
     virtual void OnWrite(std::int32_t fd) = 0;
     
@@ -61,11 +62,13 @@ protected:
 
 protected:
     std::unique_ptr<PollfdStore> fd_store_;
+    std::vector<pollfd> fds_;
 
 private:
-    std::vector<pollfd> fds_;
     std::size_t capacity_;
     std::int32_t timeout_;
+    bool unsafe_to_remove_fd_;
+    std::vector<std::int32_t> fd_pending_removal_;
 };
 
 }
