@@ -75,9 +75,9 @@ private:
     //      but continue to listen on them until we receive EOF
     //      register this with signal handler
 private:
-    const int port_;
+    const std::int32_t port_;
     const std::size_t connection_backlog_;
-    int server_fd_;
+    std::int32_t server_fd_;
     Buffer buffer_;
     std::vector<ClientDesc> clients_;
     std::size_t client_counter_;

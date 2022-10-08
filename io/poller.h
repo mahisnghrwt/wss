@@ -4,8 +4,10 @@
 #define _GNU_SOURCE
 #endif
 
+#include "fd_desc.h"
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <poll.h>
 #include <queue>
 #include <vector>
@@ -22,18 +24,15 @@ public:
         READ_WRITE = 0b11
     };
 
-    std::function<void(int fd)> on_read;
-    std::function<void(int fd)> on_write;
-    std::function<void(int fd, short flags)> on_hangup;
-    std::function<void(int fd, short flags)> on_unexpected_event;
-    std::function<void()> on_timeout;
-
+    template<typename FdStoreT>
     Poller(std::size_t nfds)
         : capacity_(nfds)
         , timeout_(-1)
-    {}
+    {
+        fd_store_ = std::make_unique<FdStoreT>();
+    }
 
-    // close all fd in fds_
+    // close all fds_  in destructor
 
     bool AddFd(int fd, Event event);
     bool RemoveFd(int fd);
@@ -41,10 +40,29 @@ public:
 
     void set_timeout(int32_t timeout) { timeout_ = timeout; }
 
-private:
-    const short unexpected_events = POLLPRI | POLLERR | POLLNVAL;
-    const short hangup_events = POLLRDHUP | POLLHUP;
+protected:
+    // IF EOF -> OnEOF
+    virtual void OnRead(std::int32_t fd) = 0;
+    virtual void OnWrite(std::int32_t fd) = 0;
+    
+    // for POLLRDHUP POLLHUP
+    // shutdown // wait for EOF
+    virtual void OnHangup(std::int32_t fd);
+    
+    // shutdown // close // stop polling
+    virtual void OnEOF(std::int32_t fd);
 
+    // log and stop polling the fd
+    virtual void OnPollnval(std::int32_t fd);
+    // log and ignore
+    virtual void OnPollerr(std::int32_t fd);
+
+    virtual void OnTimeout() {};
+
+protected:
+    std::unique_ptr<PollfdStore> fd_store_;
+
+private:
     std::vector<pollfd> fds_;
     std::size_t capacity_;
     std::int32_t timeout_;

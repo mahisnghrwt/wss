@@ -29,3 +29,18 @@ void Panic(StrT&& format_str)
     proxy_str += "%s";
     Panic(err_num, proxy_str, "");
 }
+
+namespace wss::utils {
+
+template<typename T, typename StrT>
+bool pperror(T rv, StrT&& msg)
+{
+    if (rv == -1) { perror(msg); return true; }
+    return false;
+}
+
+template<typename T>
+bool pperror(T rv)
+{ return pperror(rv, ""); }
+
+}

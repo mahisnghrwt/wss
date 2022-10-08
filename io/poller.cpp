@@ -1,5 +1,9 @@
 #include "poller.h"
+#include "fd_desc.h"
+#include "../utils.h"
 #include <cassert>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace wss {
 bool Poller::AddFd(int fd, Event event)
@@ -18,7 +22,7 @@ bool Poller::AddFd(int fd, Event event)
     }
     flags |= POLLRDHUP;
 
-    fds_.emplace_back(pollfd{fd, flags, 0});
+    fds_.emplace_back(pollfd{ fd, flags, 0 });
 
     return true;
 }
@@ -41,15 +45,13 @@ void Poller::Run()
     while(true)
     {
         auto events = poll(fds_.data(), fds_.size(), timeout_);
-        if (events == -1)
+        if (utils::pperror(events))
         {
-            perror("poll returned");
             return;
         }
         else if (events == 0)
         {
-            if (on_timeout)
-                on_timeout();
+            OnTimeout();
             return;
         }
 
@@ -58,26 +60,25 @@ void Poller::Run()
             auto& pfd = *it;
             if (pfd.revents != 0)
             {
-                assert(pfd.fd >= 0);
-                if (pfd.revents & unexpected_events)
+                if (pfd.revents & POLLERR || pfd.events & POLLPRI)
                 {
-                    if (on_unexpected_event)
-                        on_unexpected_event(pfd.fd, pfd.revents);
+                    OnPollerr(pfd.fd);
                 }
-                if (pfd.revents & hangup_events)
+                if (pfd.revents & POLLHUP || pfd.events & POLLRDHUP)
                 {
-                    if (on_hangup)
-                        on_hangup(pfd.fd, pfd.revents);
+                    OnHangup(pfd.fd);
                 }
                 if (pfd.revents & POLLIN)
                 {
-                    if (on_read)
-                        on_read(pfd.fd);
+                    OnRead(pfd.fd);
                 }
                 if (pfd.revents & POLLOUT)
                 {
-                    if (on_write)
-                        on_write(pfd.fd);
+                    OnWrite(pfd.fd);
+                }
+                if (pfd.revents & POLLNVAL)
+                {
+                    OnPollnval(pfd.fd);
                 }
 
                 pfd.revents = 0;
@@ -86,4 +87,62 @@ void Poller::Run()
         }
     }
 }
+
+void Poller::OnHangup(std::int32_t fd)
+{
+    auto* desc = fd_store_->Get(fd);
+    desc->state = PollfdDesc::SHUTDOWN;
+
+    if (desc != nullptr && desc->eof_received)
+    {
+        OnEOF(fd);
+    }
+    else if (desc != nullptr && utils::pperror(shutdown(fd, SHUT_RDWR)))
+    {}
+    else
+    {
+        desc->state = PollfdDesc::CLOSED;
+        close(fd);
+        fd_store_->Remove(fd);
+    }
+}
+
+void Poller::OnEOF(std::int32_t fd)
+{
+    auto* desc = fd_store_->Get(fd);
+    assert(desc != nullptr);
+    // log and don't assert
+    if (!desc->eof_received)
+    {
+        printf("! (%d) eof not received\n", fd);
+    }
+    if (desc->state == PollfdDesc::CLOSED)
+    {
+        printf("! (%d) already in CLOSED state\n", fd);
+    }
+    if (desc->state != PollfdDesc::SHUTDOWN)
+    {
+        utils::pperror(shutdown(fd, SHUT_RDWR));
+    }
+
+    utils::pperror(close(fd));
+  
+    RemoveFd(fd);
+
+    fd_store_->Remove(fd);
+}
+
+void Poller::OnPollnval(std::int32_t fd)
+{
+    auto* desc = fd_store_->Get(fd);
+    utils::pperror(close(fd));
+    RemoveFd(fd);
+    fd_store_->Remove(fd);
+}
+
+void Poller::OnPollerr(std::int32_t fd)
+{
+    printf("! (%d) pollerr received\n", fd);
+}
+
 }
