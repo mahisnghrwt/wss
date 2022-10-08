@@ -38,18 +38,68 @@ public:
     void Run();
     void Shutdown(int exit_status);
 
-    // clean client_fds and server_fd
-    // ctor:
-    //      port
-    //      
-    // run: start listening
-    //      poll server_fd and client_fds for read
-    //      POLLIN
-    //      POLLRDHUP (define _GNU_SOURCE before including any header file) // ignnore for now
-    //      POLLERR
-    //      POLLHUP, peer closed connection, but continue reading until read() call returns 0
-    //          meaninig END OF FILE
+    /* 
+    *   OnRead
+    *       if server_fd
+    *           OnNewConnection
+    *       if client_fd
+    *           OnClientData       
+    */
 
+   /* 
+    *   OnNewConnection
+    *       accept
+    *           if fails
+    *               log and return early
+    *       set O_NONBLOCK flag on client_socket
+    *       AddFd for polling
+    */
+
+   /*
+    *   OnClientData
+    *       if `read` return value == 0,
+    *           desc.eof_received = true
+    *           OnEOF
+    *       else
+    *           check for other errors?     
+    */
+
+   /*
+    *   OnWrite
+    *       return
+    */
+
+   /*
+    *   OnHangup
+    *       if server_fd:
+    *           NOT_POSSIBLE
+    *       else:
+    *           Poller::OnHangup()
+    */
+
+   /*
+    *   OnEOF:
+    *       if server_fd:
+    *           NOT_POSSIBLE
+    *       else:
+    *           Poller::EOF
+    */
+
+   /*
+    *   OnPollnval:
+    *       If server_fd:
+    *           NOT_POSSIBLE
+    *       else:
+    *           Poller::OnPollnval
+    */
+
+   /*
+    *   REGISTER WITH SIGNAL HANDLER
+    *   Shutdown
+    *       for all client_fd:
+    *           Poller::OnEOF(client_fd)
+    *       Poller::OnEOF(server_fd)
+    */
 
 private:
     void HandleReadAvailable(int client_fd);
@@ -58,22 +108,7 @@ private:
     void HandleHangup(int client_fd, short flags);
     void HandleUnexpectedEvent(int client_fd, short flags);
     void HandleTimeout();
-
-    // 
-    // OnNewConnection
-    //      set NONBLOCK flag
-    //      { socket_fd, id}
-    // OnConnectionClose
-    //      clean client's state
-    //      send heartbeats to client, if return value for write is -1, means connection is closed
-    // OnClientMsg
-    //      print data
-    //      clean the buffer
-    //      if read's return value is 0, means client disconnected
-    // shutdown
-    //      close all connection
-    //      but continue to listen on them until we receive EOF
-    //      register this with signal handler
+    
 private:
     const std::int32_t port_;
     const std::size_t connection_backlog_;

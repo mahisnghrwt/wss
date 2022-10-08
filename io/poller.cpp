@@ -111,7 +111,6 @@ void Poller::OnEOF(std::int32_t fd)
 {
     auto* desc = fd_store_->Get(fd);
     assert(desc != nullptr);
-    // log and don't assert
     if (!desc->eof_received)
     {
         printf("! (%d) eof not received\n", fd);
