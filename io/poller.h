@@ -8,17 +8,18 @@
 #include <functional>
 #include <poll.h>
 #include <queue>
+#include <vector>
 
 namespace wss {
 
 class Poller
 {
 public:
-    enum class Event : std::uint8_t
+    enum Event : std::uint8_t
     {
-        READ,
-        WRITE,
-        READ_WRITE
+        READ = 0b1,
+        WRITE = 0b10,
+        READ_WRITE = 0b11
     };
 
     std::function<void(int fd)> on_read;
@@ -28,17 +29,11 @@ public:
     std::function<void()> on_timeout;
 
     Poller(std::size_t nfds)
-        : size_(0)
-        , capacity_(nfds)
+        : capacity_(nfds)
         , timeout_(-1)
-    {
-        fds_ = new pollfd[nfds];
-    }
+    {}
 
-    ~Poller()
-    {
-        delete[] fds_;
-    }
+    // close all fd in fds_
 
     bool AddFd(int fd, Event event);
     bool RemoveFd(int fd);
@@ -50,10 +45,8 @@ private:
     const short unexpected_events = POLLPRI | POLLERR | POLLNVAL;
     const short hangup_events = POLLRDHUP | POLLHUP;
 
-    pollfd* fds_;
-    std::size_t size_;
+    std::vector<pollfd> fds_;
     std::size_t capacity_;
-    std::queue<std::size_t> reusable_fd_spots_;
     std::int32_t timeout_;
 };
 
