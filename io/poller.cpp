@@ -73,26 +73,29 @@ void Poller::Run()
             auto& pfd = *it;
             if (pfd.revents != 0)
             {
-                if (pfd.revents & POLLERR || pfd.events & POLLPRI)
-                {
-                    OnPollerr(pfd.fd);
-                }
-                if (pfd.revents & POLLHUP || pfd.events & POLLRDHUP)
-                {
-                    OnHangup(pfd.fd);
-                }
                 if (pfd.revents & POLLIN)
                 {
                     OnRead(pfd.fd);
                 }
-                if (pfd.revents & POLLOUT)
+                else
                 {
-                    OnWrite(pfd.fd);
-                }
-                if (pfd.revents & POLLNVAL)
-                {
-                    OnPollnval(pfd.fd);
-                }
+                    if (pfd.revents & POLLERR || pfd.events & POLLPRI)
+                    {
+                        OnPollerr(pfd.fd);
+                    }
+                    if (pfd.revents & POLLHUP || pfd.events & POLLRDHUP)
+                    {
+                        OnHangup(pfd.fd);
+                    }
+                    // if (pfd.revents & POLLOUT)
+                    // {
+                    //     OnWrite(pfd.fd);
+                    // }
+                    if (pfd.revents & POLLNVAL)
+                    {
+                        OnPollnval(pfd.fd);
+                    }
+                }                
 
                 pfd.revents = 0;
                 --events;
