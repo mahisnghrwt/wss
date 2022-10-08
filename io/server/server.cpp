@@ -103,7 +103,7 @@ void Server::OnClientData(std::int32_t client_fd)
     }
     else if (bytes_read > 0)
     {
-        printf("=> data:\n\t%s\n", buffer_.data());
+        printf("=> data:[%s]\n", buffer_.data());
     }
     buffer_.Clear();
 }
