@@ -21,7 +21,7 @@ void signal_handler(int signal)
 
 void connect_to_server()
 {    
-    const int server_port = 8080;
+    const int server_port = 10555;
 
     socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket < 0)

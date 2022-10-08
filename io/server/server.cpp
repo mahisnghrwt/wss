@@ -83,7 +83,7 @@ void Server::OnNewConnection()
 {
     socklen_t addrlen = sizeof(address_);
     auto client_fd = accept4(server_fd_, (sockaddr*)&address_, &addrlen, SOCK_NONBLOCK);
-    if (!utils::pperror(client_fd, "=> error accpeting a new connections"))
+    if (!utils::pperror(client_fd, "=> error accpeting a new connection"))
     {
         printf("=> new client connected\n");
         AddFd(client_fd, Poller::Event::READ);
@@ -103,7 +103,7 @@ void Server::OnClientData(std::int32_t client_fd)
     }
     else if (bytes_read > 0)
     {
-        printf("=> data:\n\t%s", buffer_.data());
+        printf("=> data:\n\t%s\n", buffer_.data());
     }
     buffer_.Clear();
 }
