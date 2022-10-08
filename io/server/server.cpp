@@ -96,6 +96,9 @@ void Server::OnClientData(std::int32_t client_fd)
     utils::pperror(bytes_read, "=> error reading from a client fd");
     if (bytes_read == 0)
     {
+        auto* desc = fd_store_->Get(client_fd);
+        if (desc != nullptr)
+            desc->eof_received = true;
         OnEOF(client_fd);
     }
     else if (bytes_read > 0)

@@ -34,8 +34,6 @@ public:
 
     virtual ~Poller() {}
 
-    // close all fds_  in destructor
-
     bool AddFd(int fd, Event event);
     bool RemoveFd(int fd);
     void Run();
