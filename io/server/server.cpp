@@ -40,7 +40,7 @@ void Server::init()
             return;
     }
 
-    printf("=> listening for new connections\n");
+    LOG("listening for new connections\n");
 
     AddFd(server_fd_, Poller::Event::READ);
 }
@@ -53,7 +53,7 @@ void Server::Run()
 
 void Server::Shutdown()
 {
-    printf("=> shutting down server\n");
+    LOG("shutting down server\n");
 
     for (std::size_t i = 0; i < fds_.size();)
     {
@@ -85,7 +85,7 @@ void Server::OnNewConnection()
     auto client_fd = accept4(server_fd_, (sockaddr*)&address_, &addrlen, SOCK_NONBLOCK);
     if (!utils::pperror(client_fd, "=> error accpeting a new connection"))
     {
-        printf("=> new client connected\n");
+        LOG("new client connected\n");
         AddFd(client_fd, Poller::Event::READ);
     }    
 }
@@ -103,7 +103,7 @@ void Server::OnClientData(std::int32_t client_fd)
     }
     else if (bytes_read > 0)
     {
-        printf("=> data:[%s]\n", buffer_.data());
+        LOG("data:[%s]\n", buffer_.data());
     }
     buffer_.Clear();
 }

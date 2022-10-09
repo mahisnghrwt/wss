@@ -25,7 +25,7 @@ bool Poller::AddFd(int fd, Event event)
     fds_.emplace_back(pollfd{ fd, flags, 0 });
     fd_store_->Add(fd, PollfdDesc{PollfdDesc::OPEN, false});
 
-    printf("=> fd(%d) polling for event(%d)\n", fd, event);
+    LOG("fd(%d) polling for event(%d)\n", fd, event);
     
     return true;
 }
@@ -35,7 +35,7 @@ bool Poller::RemoveFd(int fd)
     if (unsafe_to_remove_fd_)
     {
         fd_pending_removal_.emplace_back(fd);
-        printf("=> fd(%d) pending removal\n", fd);
+        LOG("fd(%d) pending removal\n", fd);
         return false;
     }
     for (auto fds_it = fds_.begin(); fds_it != fds_.end(); ++fds_it)
@@ -47,7 +47,7 @@ bool Poller::RemoveFd(int fd)
         }
     }
     fd_store_->Remove(fd);
-    printf("=> fd(%d) removed\n", fd);
+    LOG("fd(%d) removed\n", fd);
     return true;
 }
 
@@ -65,7 +65,7 @@ void Poller::Run()
             return;
         }
 
-        printf("=> %d events received\n", events);
+        LOG("%d events received\n", events);
 
         unsafe_to_remove_fd_ = true;
         for (auto it = fds_.begin(); it != fds_.end() && events > 0; ++it)
@@ -113,7 +113,7 @@ void Poller::Run()
 
 void Poller::OnHangup(std::int32_t fd)
 {
-    printf("=> fd(%d) hungup\n", fd);
+    LOG("fd(%d) hungup\n", fd);
 
     auto* desc = fd_store_->Get(fd);
 
@@ -136,35 +136,35 @@ void Poller::OnHangup(std::int32_t fd)
 
 void Poller::OnEOF(std::int32_t fd)
 {
-    printf("=> fd(%d) EOF received\n", fd);
+    LOG("fd(%d) EOF received\n", fd);
 
     auto* desc = fd_store_->Get(fd);
     
     if (desc != nullptr)
     {
         if (!desc->eof_received)
-            printf("=> fd(%d) EOF NOT received\n", fd);
+            LOG("fd(%d) EOF NOT received\n", fd);
         if (desc->state == PollfdDesc::CLOSED)
-            printf("=> fd(%d) already in closed state\n", fd);
+            LOG("fd(%d) already in closed state\n", fd);
         if (desc->state != PollfdDesc::SHUTDOWN)
             utils::pperror(shutdown(fd, SHUT_RDWR));
     }  
 
-    printf("=> fd(%d) closing connection\n", fd);
+    LOG("fd(%d) closing connection\n", fd);
     utils::pperror(close(fd));
     RemoveFd(fd);
 }
 
 void Poller::OnPollnval(std::int32_t fd)
 {
-    printf("=> fd(%d) POLLNVAL received, closing connection\n", fd);
+    LOG("fd(%d) POLLNVAL received, closing connection\n", fd);
     utils::pperror(close(fd));
     RemoveFd(fd);
 }
 
 void Poller::OnPollerr(std::int32_t fd)
 {
-    printf("=> fd(%d) POLLERR received, ignoring\n", fd);
+    LOG("fd(%d) POLLERR received, ignoring\n", fd);
 }
 
 }
