@@ -15,14 +15,6 @@
 
 namespace wss {
 
-struct ClientDesc
-{
-    std::uint64_t id;
-    int fd;
-    bool shutdown_requested;
-    bool eof_received;
-};
-
 class Server : public Poller
 {
 public:
