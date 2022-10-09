@@ -1,8 +1,11 @@
 #pragma once
 
+#include <cassert>
 #include <cstdio>
-#include <string>
+#include <cstring>
+#include <ctime>
 #include <error.h>
+#include <locale>
 #include <stdlib.h>
 
 template<typename StrT, typename... Ts>
@@ -44,3 +47,19 @@ bool pperror(T rv)
 { return pperror(rv, ""); }
 
 }
+
+inline const char* get_local_time()
+{
+    static char str[9];
+    memset(str, '\0', sizeof(str));
+    std::time_t t = std::time(nullptr);
+
+    if (std::strftime(str, sizeof(str), "%T", std::localtime(&t)) == 0)
+        assert(false);
+
+    return str;
+}
+
+#define LOG(...) \
+    printf("%9s | %s | ", get_local_time(), __FUNCTION__); \
+    printf(__VA_ARGS__);
