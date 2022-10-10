@@ -1,6 +1,6 @@
-# add_library(server server.cpp)
+add_library(client client.cpp)
 
-# target_link_libraries(server poller)
+target_link_libraries(client poller)
 
 # add_executable(sample_server_app sample_app.cpp)
 
