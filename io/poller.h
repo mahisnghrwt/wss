@@ -44,15 +44,17 @@ protected:
     virtual void OnRead(std::int32_t fd) = 0;
     virtual void OnWrite(std::int32_t fd) = 0;
     
-    // for POLLRDHUP POLLHUP
-    // shutdown // wait for EOF
+    // if EOF alredy received, call OnEOF.
+    // else, try shutting down the connection,
+    // if fails, close the connection and stop polling the fd
     virtual void OnHangup(std::int32_t fd);
     
-    // shutdown // close // stop polling
+    // shutdown if not already. close the connection and stop polling the fd
     virtual void OnEOF(std::int32_t fd);
 
     // log and stop polling the fd
     virtual void OnPollnval(std::int32_t fd);
+    
     // log and ignore
     virtual void OnPollerr(std::int32_t fd);
 
