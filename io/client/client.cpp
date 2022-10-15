@@ -47,10 +47,14 @@ void Client::Init()
         return;
 
     if (!AddFd(STDIN_FILENO, READ))
+    {
         LOG("couldn't add fd\n");
-
+    }
+        
     if (!AddFd(socket_fd_, READ))
+    {
         LOG("couldn't add fd\n");
+    }        
 }
 
 void Client::OnRead(std::int32_t fd)
@@ -59,7 +63,6 @@ void Client::OnRead(std::int32_t fd)
     if (fd == 0)
     {
         auto bytes_read = read(0, write_buffer_.head(), write_buffer_.cap_available());
-        write_buffer_.move_head(bytes_read);
         LOG("%d bytes read\n", bytes_read);
         if (utils::pperror(bytes_read))
         {
@@ -69,6 +72,10 @@ void Client::OnRead(std::int32_t fd)
 
         if (bytes_read > 0)
         {
+            // last bytes in the new-line character
+            write_buffer_.move_head(bytes_read - 1);           
+            *(write_buffer_.head()) = '\0';
+
             bool socket_fd_found = false;
             for (auto& fd_desc : fds_)
             {
@@ -113,7 +120,7 @@ void Client::OnWrite(std::int32_t fd)
     else
     {
         assert(fd == socket_fd_);
-        printf("data in write_buffer: [%s]\n", write_buffer_.data());
+        LOG_DEBUG("data in write_buffer: [%s]\n", write_buffer_.data());
         if (write_buffer_.size() > 0)
         {
             auto bytes_written = write(fd, write_buffer_.data(), write_buffer_.size());

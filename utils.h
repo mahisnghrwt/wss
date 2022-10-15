@@ -61,8 +61,10 @@ inline const char* get_local_time()
 }
 
 #define LOG(...) \
-    printf("%9s [%s] ", get_local_time(), __FUNCTION__); \
-    printf(__VA_ARGS__);
+    { \
+        printf("%9s [%s] ", get_local_time(), __FUNCTION__); \
+        printf(__VA_ARGS__); \
+    }
 
 #ifdef DEBUG
 #define LOG_DEBUG(...) LOG(__VA_ARGS__)
