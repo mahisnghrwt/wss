@@ -59,6 +59,7 @@ void Client::OnRead(std::int32_t fd)
     if (fd == 0)
     {
         auto bytes_read = read(0, write_buffer_.head(), write_buffer_.cap_available());
+        write_buffer_.move_head(bytes_read);
         LOG("%d bytes read\n", bytes_read);
         if (utils::pperror(bytes_read))
         {
@@ -82,6 +83,7 @@ void Client::OnRead(std::int32_t fd)
             {
                 LOG("socket_fd(%d) not found in fds_\n", socket_fd_);
                 Shutdown();
+                assert(false);
             }
         }
     }
@@ -111,6 +113,7 @@ void Client::OnWrite(std::int32_t fd)
     else
     {
         assert(fd == socket_fd_);
+        printf("data in write_buffer: [%s]\n", write_buffer_.data());
         if (write_buffer_.size() > 0)
         {
             auto bytes_written = write(fd, write_buffer_.data(), write_buffer_.size());
@@ -129,8 +132,7 @@ void Client::OnWrite(std::int32_t fd)
         {
             if (fd_desc.fd == socket_fd_)
             {
-                std::int32_t mask = 0;
-                mask = mask ^ POLLOUT;
+                std::int32_t mask = ~POLLOUT;
                 fd_desc.events &= mask;
                 socket_fd_found = true;
                 break;
@@ -141,6 +143,7 @@ void Client::OnWrite(std::int32_t fd)
         {
             LOG("socket_fd(%d) not found in fds_\n", socket_fd_);
             Shutdown();
+            assert(false);
         }
     }
 }
