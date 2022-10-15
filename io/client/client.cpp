@@ -21,7 +21,6 @@ Client::Client(std::int32_t port)
 
 void Client::Init()
 {
-    // TODO: set nonblock flag on both stdin and socket_fd_
     socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (utils::pperror(socket_fd_))
         return;
@@ -30,21 +29,25 @@ void Client::Init()
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(port_);
 
-    if (utils::pperror(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)))
+    const std::string ip("127.0.0.1");
+
+    if (utils::pperror(inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr)))
         return;
 
-    if (!utils::pperror(connect(socket_fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)), "couldn't connect to the server"))
+    if (utils::pperror(connect(socket_fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)), "couldn't connect to the server"))
     {
-        LOG("connected to the server\n");
-        is_ok_ = true;
+        return;
     }
     else
     {
-        return;
+        LOG("connected to the server(%s:%d)\n", ip.c_str(), port_);
+        is_ok_ = true;
     }
 
     if (utils::pperror(fcntl(socket_fd_, F_SETFL, fcntl(socket_fd_, F_GETFL, 0) | O_NONBLOCK), "couldn't set the nonblocking flag"))
         return;
+
+    // O_NONBLOCK flag not required for STDIN?
 
     if (!AddFd(STDIN_FILENO, READ))
     {
@@ -112,7 +115,7 @@ void Client::OnRead(std::int32_t fd)
 
 void Client::OnWrite(std::int32_t fd)
 {
-    if (fd == 0)
+    if (fd == STDIN_FILENO)
     {
         LOG("received write event on STDIN\n");
         Shutdown();
@@ -157,7 +160,6 @@ void Client::OnWrite(std::int32_t fd)
 
 void Client::Shutdown()
 {
-    OnEOF(0);
     OnEOF(socket_fd_);
     is_ok_ = false;
 }

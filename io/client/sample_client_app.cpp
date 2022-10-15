@@ -1,26 +1,37 @@
 #include "client.h"
 #include "../../utils.h"
 #include <signal.h>
+#include <string>
 
-wss::Client client(10555);
+wss::Client* client = nullptr;
 
 void signal_handler(int signall)
 {
     LOG_DEBUG("signal handler triggered\n");
-    client.Shutdown();
+    if (client != nullptr)
+        client->Shutdown();
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc != 2)
+    {
+        LOG("expected PORT as a command line argument\n");
+        return 1;
+    }
+
+    std::int32_t port = std::stoi(*(argv + 1));
+    client = new wss::Client(port);
+
     signal(SIGINT, signal_handler);
 
-    if (!client.is_ok())
+    if (!client->is_ok())
     {
-        printf("coulnd't connect to the server\n");
+        LOG("coulnd't connect to the server\n");
         return 0;
     }
     
-    client.Run();
+    client->Run();
 
     return 0;
 }
