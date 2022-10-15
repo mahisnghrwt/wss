@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define LOG_EVENT(fd, event) LOG("fd(%d) event(%s)\n", fd, #event);
+
 namespace wss {
 bool Poller::AddFd(int fd, Event event)
 {
@@ -75,24 +77,29 @@ void Poller::Run()
             {
                 if (pfd.revents & POLLNVAL)
                 {
+                    LOG_EVENT(pfd.fd, POLLNVAL);
                     OnPollnval(pfd.fd);
                 }
                 else if (pfd.revents & POLLIN)
                 {
+                    LOG_EVENT(pfd.fd, POLLIN);
                     OnRead(pfd.fd);
                 }
                 else if (pfd.revents & POLLOUT)
                 {
+                    LOG_EVENT(pfd.fd, POLLOUT);
                     OnWrite(pfd.fd);
                 }
                 else
                 {
                     if (pfd.revents & POLLERR || pfd.events & POLLPRI)
                     {
+                        LOG_EVENT(pfd.fd, POLLERR);
                         OnPollerr(pfd.fd);
                     }
                     if (pfd.revents & POLLHUP || pfd.events & POLLRDHUP)
                     {
+                        LOG_EVENT(pfd.fd, POLLHUP);
                         OnHangup(pfd.fd);
                     }
                 }                

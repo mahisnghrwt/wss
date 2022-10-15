@@ -1,93 +1,169 @@
-#include "../../buffer.h"
-#include <cassert>
-#include <iostream>
-#include <signal.h>
-#include <arpa/inet.h>
-#include <stdio.h>
-#include <string.h>
+#include "client.h"
+#include "../../utils.h"
 #include <sys/socket.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 
-int socket_fd = -1;
-int client_fd = -1;
+namespace wss {
 
-void signal_handler(int signal)
+Client::Client(std::int32_t port)
+    : Poller(10)
+    , port_(port)
+    , is_ok_(false)
+    , write_buffer_(BUFFER_SIZE)
+    , read_buffer_(BUFFER_SIZE)
+    , socket_fd_(-1)
 {
-    if (client_fd >= 0 && close(client_fd) != 0)
-        perror("");
-    printf("singal caught(%d)", signal);
-    exit(EXIT_FAILURE);
+    Init();
 }
 
-void connect_to_server()
-{    
-    const int server_port = 10555;
-
-    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket < 0)
-    {
-        perror("");
+void Client::Init()
+{
+    // TODO: set nonblock flag on both stdin and socket_fd_
+    socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (utils::pperror(socket_fd_))
         return;
-    }
 
 	sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(server_port);
+	serv_addr.sin_port = htons(port_);
 
-	// Convert IPv4 and IPv6 addresses from text to binary
-	// form
-	if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
+    if (utils::pperror(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)))
+        return;
+
+    if (!utils::pperror(connect(socket_fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)), "couldn't connect to the server"))
     {
-		perror("");
+        LOG("connected to the server\n");
+        is_ok_ = true;
+    }
+    else
+    {
         return;
-	}
+    }
 
-    client_fd = connect(socket_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-
-	if (client_fd < 0)
-	{
-		perror("");
+    if (utils::pperror(fcntl(socket_fd_, F_SETFL, fcntl(socket_fd_, F_GETFL, 0) | O_NONBLOCK), "couldn't set the nonblocking flag"))
         return;
-	}
+
+    if (!AddFd(STDIN_FILENO, READ))
+        LOG("couldn't add fd\n");
+
+    if (!AddFd(socket_fd_, READ))
+        LOG("couldn't add fd\n");
 }
 
-void tty()
+void Client::OnRead(std::int32_t fd)
 {
-    assert(socket_fd >= 0);
-    while(true)
+    LOG("fd(%d) called\n", fd);
+    if (fd == 0)
     {
-        std::string buffer;
-        std::cout << ">>> ";
-        std::cin >> buffer;
-        auto bytes_written = send(socket_fd, buffer.c_str(), buffer.size(), 0);
-        if (bytes_written < 0)
-            perror("error sending data");
+        auto bytes_read = read(0, write_buffer_.head(), write_buffer_.cap_available());
+        write_buffer_.move_head(bytes_read);
+        LOG("%d bytes read\n", bytes_read);
+        if (utils::pperror(bytes_read))
+        {
+            Shutdown();
+            return;
+        }
+
+        if (bytes_read > 0)
+        {
+            bool socket_fd_found = false;
+            for (auto& fd_desc : fds_)
+            {
+                if (fd_desc.fd == socket_fd_)
+                {
+                    fd_desc.events |= POLLOUT;
+                    socket_fd_found = true;
+                    break;
+                }
+            }
+            if (!socket_fd_found)
+            {
+                LOG("socket_fd(%d) not found in fds_\n", socket_fd_);
+                Shutdown();
+                assert(false);
+            }
+        }
+    }
+    else
+    {
+        auto bytes_read = read(0, read_buffer_.head(), read_buffer_.cap_available());
+        if (utils::pperror(bytes_read) || bytes_read == 0)
+        {
+            Shutdown();
+        }
         else
-            printf("(%d) bytes written\n", bytes_written);
+        {
+            LOG("%d bytes read\n", bytes_read);
+            LOG("data: [%s]", read_buffer_.data());
+            read_buffer_.Clear();
+        }        
     }
 }
 
-
-int main(int argc, char const* argv[])
+void Client::OnWrite(std::int32_t fd)
 {
-    signal(SIGINT, signal_handler);
+    if (fd == 0)
+    {
+        LOG("received write event on STDIN\n");
+        Shutdown();
+    }
+    else
+    {
+        assert(fd == socket_fd_);
+        printf("data in write_buffer: [%s]\n", write_buffer_.data());
+        if (write_buffer_.size() > 0)
+        {
+            auto bytes_written = write(fd, write_buffer_.data(), write_buffer_.size());
+            LOG("fd(%d) (%d) bytes written\n", fd, bytes_written);
+            if (utils::pperror(bytes_written, "error writing to the socket_fd"))
+            {
+                Shutdown();
+                return;
+            }
+        }
 
-	connect_to_server();
+        write_buffer_.Clear();
 
-    if (socket_fd < 0 || client_fd < 0)
-        return 1;
+        bool socket_fd_found = false;
+        for (auto& fd_desc : fds_)
+        {
+            if (fd_desc.fd == socket_fd_)
+            {
+                std::int32_t mask = ~POLLOUT;
+                fd_desc.events &= mask;
+                socket_fd_found = true;
+                break;
+            }
+        }
 
-    tty();
+        if (!socket_fd_found)
+        {
+            LOG("socket_fd(%d) not found in fds_\n", socket_fd_);
+            Shutdown();
+            assert(false);
+        }
+    }
+}
 
-	// send(sock, hello, strlen(hello), 0);
-	// printf("Hello message sent\n");
-	// valread = read(sock, buffer, 1024);
-	// printf("%s\n", buffer);
+void Client::Shutdown()
+{
+    OnEOF(0);
+    OnEOF(socket_fd_);
+    is_ok_ = false;
+}
 
-	// closing the connected socket
-	close(client_fd);
+void Client::OnHangup(std::int32_t fd)
+{
+    if (fd != STDIN_FILENO)
+        Shutdown();
+}
 
-    exit(EXIT_SUCCESS);
+void Client::OnPollnval(std::int32_t fd)
+{
+    Shutdown();
+}
 
-	return 0;
 }
