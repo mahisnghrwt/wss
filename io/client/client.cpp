@@ -118,7 +118,7 @@ void Client::OnWrite(std::int32_t fd)
         {
             auto bytes_written = write(fd, write_buffer_.data(), write_buffer_.size());
             LOG("fd(%d) (%d) bytes written\n", fd, bytes_written);
-            if (utils::pperror(bytes_written), "error writing to the socket_fd")
+            if (utils::pperror(bytes_written, "error writing to the socket_fd"))
             {
                 Shutdown();
                 return;
@@ -157,7 +157,8 @@ void Client::Shutdown()
 
 void Client::OnHangup(std::int32_t fd)
 {
-    Shutdown();
+    if (fd != STDIN_FILENO)
+        Shutdown();
 }
 
 void Client::OnPollnval(std::int32_t fd)
