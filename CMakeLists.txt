@@ -4,19 +4,16 @@ project (wss)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 set(CXX_STANDARD 17)
 
-add_executable(buffer_tests buffer_tests.cpp)
-add_executable(log_tests log_tests.cpp)
-target_compile_definitions(log_tests PUBLIC DEBUG)
+add_subdirectory(common)
+include_directories(${CMAKE_SOURCE_DIR})
+
+add_subdirectory(io)
 
 add_custom_target(
     run_buffer_tests
     ALL
     COMMAND
         buffer_tests
-    COMMAND
-        log_tests
     COMMENT
         "Running tests..."
-    )
-
-add_subdirectory(io)
+)

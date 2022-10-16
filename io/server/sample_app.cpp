@@ -2,7 +2,6 @@
 #include <memory>
 #include <signal.h>
 
-// wss::Server* server = nullptr;
 std::unique_ptr<wss::Server> server = nullptr;
 
 void signal_handler(int signal)
