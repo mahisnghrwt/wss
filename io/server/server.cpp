@@ -88,17 +88,70 @@ void Server::OnNewConnection()
 
 void Server::OnClientData(std::int32_t client_fd)
 {
-    auto bytes_read = read(client_fd, buffer_.head(), buffer_.cap_available());
+    auto& desc = store_.Add(client_fd);
+    if (desc.buffer.cap_available() < 512)
+        desc.buffer.reserve(desc.buffer.size() + 1024);
+    
+    auto bytes_read = read(client_fd, desc.buffer.head(), desc.buffer.cap_available());
     utils::pperror(bytes_read, "=> error reading from a client fd");
     if (bytes_read == 0)
     {
-        
+        LOG("fd(%d) EOF received\n", client_fd);
+        Shutdown(client_fd);
     }
     else if (bytes_read > 0)
     {
-        LOG("data:[%s]\n", buffer_.data());
+        LOG("data:[%s]\n", desc.buffer.head());
+        desc.buffer.move_head(bytes_read);
+        UpdateFd(client_fd, READ | WRITE);
     }
-    buffer_.Clear();
+}
+
+void Server::OnWrite(std::int32_t fd)
+{
+    if (fd == server_fd_)
+    {
+        ShutdownAll();
+    }
+    else
+    {
+        auto* desc = store_.Find(fd);
+        if (desc != nullptr && desc->buffer.size() > 0)
+        {
+            auto bytes_written = send(fd, desc->buffer.data(), desc->buffer.size(), 0);
+
+            LOG("fd(%d) (%ld) bytes written\n", fd, bytes_written);
+            
+            if (utils::pperror(bytes_written, "=> error writing to fd"))
+                return;
+
+            if (bytes_written == desc->buffer.size())
+            {
+                desc->buffer.Clear();
+                UpdateFd(fd, READ);
+            }
+            else if (bytes_written > 0)
+            {
+                assert(bytes_written < desc->buffer.size());
+
+                char* new_data = new char[desc->buffer.size()];
+                
+                auto remaining_data_size = desc->buffer.size() - bytes_written;
+                LOG("fd(%d) (%ld) bytes pending to be written\n", fd, remaining_data_size);
+                memcpy(new_data, desc->buffer.data() + bytes_written, remaining_data_size);
+                
+                desc->buffer.Clear();
+                memcpy(desc->buffer.head(), new_data, remaining_data_size);
+                desc->buffer.move_head(remaining_data_size);
+
+                delete[] new_data;
+            }
+        }
+        else
+        {
+            UpdateFd(fd, READ);
+        }
+    }
 }
 
 void Server::OnInvalidFd(std::int32_t fd)

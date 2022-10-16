@@ -33,6 +33,18 @@ public:
     std::size_t cap_available() const { return capacity_ - offset_; }
     std::size_t capacity() const { return capacity_; }
 
+    void reserve(std::size_t required_cap)
+    {
+        if (capacity() >= required_cap)
+            return;
+        
+        char* new_storage = new char[required_cap];
+        memcpy(new_storage, storage_, size());
+        delete[] storage_;
+        storage_ = new_storage;
+        capacity_ = required_cap;
+    }
+
     void Clear()
     {
         memset(storage_, 0, capacity_);

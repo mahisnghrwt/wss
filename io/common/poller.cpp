@@ -92,6 +92,10 @@ void Poller::UpdateFd(int fd, uint8_t event)
         if (fds_it->fd == fd)
         {
             fds_it->events = event;
+            if (READ & event)
+                fds_it->events |= POLLIN;
+            if (WRITE & event)
+                fds_it->events |= POLLOUT;
             break;
         }
     }
@@ -135,7 +139,7 @@ void Poller::Run()
                     if (pfd.revents & POLLOUT)
                         OnWrite(pfd.fd);
                 } 
-                else if (pfd.events & POLLRDHUP)
+                if (pfd.revents & POLLRDHUP)
                 {
                     OnConnectionAborted(pfd.fd);
                 }                

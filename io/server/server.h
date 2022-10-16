@@ -5,12 +5,14 @@
 #endif
 
 #include "io/common/poller.h"
+#include "io/common/store.h"
 #include "common/buffer.h"
 #include <cstdint>
 #include <poll.h>
 #include <vector>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <unordered_map>
 
 namespace wss {
 
@@ -39,52 +41,18 @@ public:
 
     void Run();
 
-   /*
-    *   REGISTER WITH SIGNAL HANDLER
-    *   Shutdown
-    *       for all client_fd:
-    *           Poller::OnEOF(client_fd)
-    *       Poller::OnEOF(server_fd)
-    */
     void ShutdownAll();
 
 private:
     void init();
 
-    /* 
-    *   OnRead
-    *       if server_fd
-    *           OnNewConnection
-    *       if client_fd
-    *           OnClientData       
-    */
     void OnRead(std::int32_t fd) override;
 
-   /* 
-    *   OnNewConnection
-    *       accept
-    *           if fails
-    *               log and return early
-    *       set O_NONBLOCK flag on client_socket
-    *       AddFd for polling
-    */
     void OnNewConnection();
 
-   /*
-    *   OnClientData
-    *       if `read` return value == 0,
-    *           desc.eof_received = true
-    *           OnEOF
-    *       else
-    *           check for other errors?     
-    */
     void OnClientData(std::int32_t fd);
 
-   /*
-    *   OnWrite
-    *       return
-    */
-    void OnWrite(std::int32_t fd) override {}
+    void OnWrite(std::int32_t fd) override;
 
     void OnInvalidFd(std::int32_t fd) override;
 
@@ -99,6 +67,7 @@ private:
     Buffer buffer_;
     bool is_ok_;
     sockaddr_in address_;
+    Store store_;
 };
 
 }
