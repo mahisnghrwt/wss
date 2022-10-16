@@ -11,3 +11,6 @@ Roland Waylor    ===/ O O \===
                      (o_o)
                       VwV
 ```
+
+### Building
+Use `cmake .. -Ddebug=1` to build the debug variant of the project which is more verbose.
