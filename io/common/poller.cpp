@@ -91,7 +91,7 @@ void Poller::UpdateFd(int fd, uint8_t event)
     {
         if (fds_it->fd == fd)
         {
-            fds_it->events = event;
+            fds_it->events = 0;
             if (READ & event)
                 fds_it->events |= POLLIN;
             if (WRITE & event)
