@@ -5,41 +5,65 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define LOG_EVENT(fd, event) LOG("fd(%d) event(%s)\n", fd, #event);
+#ifdef DEBUG
+#define CHECK_FOR_EVENT(events, event_to_check, out_events) \
+    { \
+        if (events & event_to_check) \
+        { \
+            out_events = out_events + " " + #event_to_check; \
+        } \
+    }
+
+#define LOG_EVENTS(fd, events) \
+    { \
+        std::string events_received; \
+        CHECK_FOR_EVENT(events, POLLIN, events_received); \
+        CHECK_FOR_EVENT(events, POLLOUT, events_received); \
+        CHECK_FOR_EVENT(events, POLLHUP, events_received); \
+        CHECK_FOR_EVENT(events, POLLRDHUP, events_received); \
+        CHECK_FOR_EVENT(events, POLLNVAL, events_received); \
+        CHECK_FOR_EVENT(events, POLLERR, events_received); \
+        CHECK_FOR_EVENT(events, POLLPRI, events_received); \
+        LOG_DEBUG("fd(%d) following events received: (%s)\n", fd, events_received.c_str()); \
+    }
+#else
+#define LOG_EVENTS(...)
+#endif
 
 namespace wss {
-bool Poller::AddFd(int fd, Event event)
+void Poller::AddFd(int fd, uint8_t event)
 {
-    if (fds_.size() == capacity_)
-        return false;
-    
-    short flags = 0;
+    if (!safe_to_update_fd_)
+    {
+        pending_tasks_.emplace_back([this, fd, event]()
+        { 
+            AddFd(fd, event);
+        });
+        return;
+    }
+
+    short flags = POLLRDHUP;
     if (event & Event::READ)
-    {
         flags |= POLLIN;
-    }
     if (event & Event::WRITE)
-    {
         flags |= POLLOUT;
-    }
-    flags |= POLLRDHUP;
 
-    fds_.emplace_back(pollfd{ fd, flags, 0 });
-    fd_store_->Add(fd, PollfdDesc{PollfdDesc::OPEN, false});
+    fds_.emplace_back(pollfd{fd, flags, 0});
 
-    LOG("fd(%d) polling for event(%d)\n", fd, event);
-    
-    return true;
+    LOG_DEBUG("fd(%d) polling for event(%d)\n", fd, event);
 }
 
-bool Poller::RemoveFd(int fd)
+void Poller::RemoveFd(int fd)
 {
-    if (unsafe_to_remove_fd_)
+    if (!safe_to_update_fd_)
     {
-        fd_pending_removal_.emplace_back(fd);
-        LOG("fd(%d) pending removal\n", fd);
-        return false;
+        pending_tasks_.emplace_back([this, fd]()
+        {
+            RemoveFd(fd);
+        });
+        return;
     }
+
     for (auto fds_it = fds_.begin(); fds_it != fds_.end(); ++fds_it)
     {
         if (fds_it->fd == fd)
@@ -48,9 +72,31 @@ bool Poller::RemoveFd(int fd)
             break;
         }
     }
-    fd_store_->Remove(fd);
-    LOG("fd(%d) removed\n", fd);
-    return true;
+    
+    LOG_DEBUG("fd(%d) removed\n", fd);
+}
+
+void Poller::UpdateFd(int fd, uint8_t event)
+{
+    if (!safe_to_update_fd_)
+    {
+        pending_tasks_.emplace_back([this, fd, event]()
+        {
+            UpdateFd(fd, event);
+        });
+        return;
+    }
+
+    for (auto fds_it = fds_.begin(); fds_it != fds_.end(); ++fds_it)
+    {
+        if (fds_it->fd == fd)
+        {
+            fds_it->events = event;
+            break;
+        }
+    }
+    
+    LOG_DEBUG("fd(%d) events updated(%d)\n", fd, event);
 }
 
 void Poller::Run()
@@ -67,41 +113,31 @@ void Poller::Run()
             return;
         }
 
-        LOG("%d events received\n", events);
+        LOG_DEBUG("(%d) fd received events\n", events);
 
-        unsafe_to_remove_fd_ = true;
+        safe_to_update_fd_ = false;
+
         for (auto it = fds_.begin(); it != fds_.end() && events > 0; ++it)
         {
             auto& pfd = *it;
             if (pfd.revents != 0)
             {
+                LOG_EVENTS(pfd.fd, pfd.revents);
+
                 if (pfd.revents & POLLNVAL)
                 {
-                    LOG_EVENT(pfd.fd, POLLNVAL);
-                    OnPollnval(pfd.fd);
+                    OnInvalidFd(pfd.fd);
                 }
-                else if (pfd.revents & POLLIN)
+                else if (pfd.revents & POLLIN || pfd.revents & POLLOUT)
                 {
-                    LOG_EVENT(pfd.fd, POLLIN);
-                    OnRead(pfd.fd);
-                }
-                else if (pfd.revents & POLLOUT)
+                    if (pfd.revents & POLLIN)
+                        OnRead(pfd.fd);
+                    if (pfd.revents & POLLOUT)
+                        OnWrite(pfd.fd);
+                } 
+                else if (pfd.events & POLLRDHUP)
                 {
-                    LOG_EVENT(pfd.fd, POLLOUT);
-                    OnWrite(pfd.fd);
-                }
-                else
-                {
-                    if (pfd.revents & POLLERR || pfd.events & POLLPRI)
-                    {
-                        LOG_EVENT(pfd.fd, POLLERR);
-                        OnPollerr(pfd.fd);
-                    }
-                    if (pfd.revents & POLLHUP || pfd.events & POLLRDHUP)
-                    {
-                        LOG_EVENT(pfd.fd, POLLHUP);
-                        OnHangup(pfd.fd);
-                    }
+                    OnConnectionAborted(pfd.fd);
                 }                
 
                 pfd.revents = 0;
@@ -109,69 +145,25 @@ void Poller::Run()
             }
         }
 
-        unsafe_to_remove_fd_ = false;
-        while(!fd_pending_removal_.empty())
-        {
-            RemoveFd(fd_pending_removal_.back());
-            fd_pending_removal_.pop_back();
-        }
+        safe_to_update_fd_ = true;
+
+        OnAllEventsRead();
+        OnAllEventsReadImpl();
     }
 }
 
-void Poller::OnHangup(std::int32_t fd)
+void Poller::OnAllEventsRead()
 {
-    LOG("fd(%d) hungup\n", fd);
+    LOG_DEBUG("executing (%ld) pending tasks\n", pending_tasks_.size());
 
-    auto* desc = fd_store_->Get(fd);
+    assert(safe_to_update_fd_);
 
-    if (desc != nullptr && desc->eof_received)
+    for (auto& task : pending_tasks_)
     {
-        OnEOF(fd);
-        desc->state = PollfdDesc::SHUTDOWN;
+        task();
     }
-    else if (desc != nullptr && utils::pperror(shutdown(fd, SHUT_RDWR)))
-    {
-        desc->state = PollfdDesc::SHUTDOWN;
-    }
-    else
-    {
-        desc->state = PollfdDesc::CLOSED;
-        close(fd);
-        RemoveFd(fd);
-    }
-}
 
-void Poller::OnEOF(std::int32_t fd)
-{
-    LOG("fd(%d) EOF received\n", fd);
-
-    auto* desc = fd_store_->Get(fd);
-    
-    if (desc != nullptr)
-    {
-        if (!desc->eof_received)
-            LOG("fd(%d) EOF NOT received\n", fd);
-        if (desc->state == PollfdDesc::CLOSED)
-            LOG("fd(%d) already in closed state\n", fd);
-        if (desc->state != PollfdDesc::SHUTDOWN)
-            utils::pperror(shutdown(fd, SHUT_RDWR));
-    }  
-
-    LOG("fd(%d) closing connection\n", fd);
-    utils::pperror(close(fd));
-    RemoveFd(fd);
-}
-
-void Poller::OnPollnval(std::int32_t fd)
-{
-    LOG("fd(%d) POLLNVAL received, closing connection\n", fd);
-    utils::pperror(close(fd));
-    RemoveFd(fd);
-}
-
-void Poller::OnPollerr(std::int32_t fd)
-{
-    LOG("fd(%d) POLLERR received, ignoring\n", fd);
+    pending_tasks_.clear();
 }
 
 }

@@ -4,7 +4,6 @@
 #define _GNU_SOURCE
 #endif
 
-#include "fd_desc.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -19,23 +18,23 @@ class Poller
 public:
     enum Event : std::uint8_t
     {
-        READ = 0b1,
-        WRITE = 0b10,
-        READ_WRITE = 0b11
+        READ = 1,
+        WRITE = 2
     };
 
-    Poller(std::size_t nfds)
-        : capacity_(nfds)
-        , timeout_(-1)
-        , unsafe_to_remove_fd_(false)
-    {
-        fd_store_ = std::make_unique<PollfdStore>();
-    }
+    Poller() = delete;
+
+    Poller()
+        : timeout_(-1)
+        , safe_to_update_fd_(true)
+    {}
 
     virtual ~Poller() {}
 
-    bool AddFd(int fd, Event event);
-    bool RemoveFd(int fd);
+    void AddFd(int fd, std::uint8_t event);
+    void RemoveFd(int fd);
+    void UpdateFd(int fd, uint8_t event);
+
     void Run();
 
     void set_timeout(int32_t timeout) { timeout_ = timeout; }
@@ -43,32 +42,19 @@ public:
 protected:
     virtual void OnRead(std::int32_t fd) = 0;
     virtual void OnWrite(std::int32_t fd) = 0;
-    
-    // if EOF alredy received, call OnEOF.
-    // else, try shutting down the connection,
-    // if fails, close the connection and stop polling the fd
-    virtual void OnHangup(std::int32_t fd);
-    
-    // shutdown if not already. close the connection and stop polling the fd
-    virtual void OnEOF(std::int32_t fd);
-
-    // log and stop polling the fd
-    virtual void OnPollnval(std::int32_t fd);
-    
-    // log and ignore
-    virtual void OnPollerr(std::int32_t fd);
+    virtual void OnInvalidFd(std::int32_t fd) = 0;
+    virtual void OnConnectionAborted(std::int32_t fd) = 0;
 
     virtual void OnTimeout() {};
-
-protected:
-    std::unique_ptr<PollfdStore> fd_store_;
-    std::vector<pollfd> fds_;
+    virtual void OnAllEventsReadImpl() {};
 
 private:
-    std::size_t capacity_;
+    void OnAllEventsRead();
+
+    std::vector<std::function<void()>> pending_tasks_;
+    bool safe_to_update_fd_;
     std::int32_t timeout_;
-    bool unsafe_to_remove_fd_;
-    std::vector<std::int32_t> fd_pending_removal_;
+    std::vector<pollfd> fds_;
 };
 
 }
