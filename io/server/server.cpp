@@ -51,23 +51,18 @@ void Server::Run()
     Poller::Run();
 }
 
-void Server::Shutdown()
+void Server::ShutdownAll()
 {
     LOG("shutting down server\n");
 
-    for (std::size_t i = 0; i < fds_.size();)
+    for (const auto& client_fd : client_fds_)
     {
-        const auto size_before = fds_.size();
-
-        if (fds_[i].fd != server_fd_)
-            OnEOF(fds_[i].fd);
-
-        if (size_before == fds_.size())
-            ++i;
+        LOG("aborting connection to fd(%d)\n", client_fd);
+        Shutdown(client_fd);
     }
+    client_fds_.clear();
 
-    OnEOF(server_fd_);
-
+    Shutdown(server_fd_);
     is_ok_ = false;
 }
 
@@ -85,7 +80,8 @@ void Server::OnNewConnection()
     auto client_fd = accept4(server_fd_, (sockaddr*)&address_, &addrlen, SOCK_NONBLOCK);
     if (!utils::pperror(client_fd, "=> error accpeting a new connection"))
     {
-        LOG("new client connected\n");
+        LOG("new client(%d) connected\n", client_fd);
+        client_fds_.emplace_back(client_fd);
         AddFd(client_fd, Poller::Event::READ);
     }    
 }
@@ -96,10 +92,7 @@ void Server::OnClientData(std::int32_t client_fd)
     utils::pperror(bytes_read, "=> error reading from a client fd");
     if (bytes_read == 0)
     {
-        auto* desc = fd_store_->Get(client_fd);
-        if (desc != nullptr)
-            desc->eof_received = true;
-        OnEOF(client_fd);
+        
     }
     else if (bytes_read > 0)
     {
@@ -108,20 +101,29 @@ void Server::OnClientData(std::int32_t client_fd)
     buffer_.Clear();
 }
 
-void Server::OnHangup(std::int32_t fd)
+void Server::OnInvalidFd(std::int32_t fd)
 {
     if (fd == server_fd_)
-        Shutdown();
+    {
+        ShutdownAll();
+    }
     else
-        Poller::OnHangup(fd);
+    {
+        utils::remove_if(client_fds_, [fd](auto& f) { return f == fd; });
+        RemoveFd(fd);
+    }
 }
 
-void Server::OnPollnval(std::int32_t fd)
+void Server::OnConnectionAborted(std::int32_t fd)
 {
-    if (fd == server_fd_)
-        Shutdown();
-    else
-        Poller::OnPollnval(fd);
+    OnInvalidFd(fd);
+}
+
+void Server::Shutdown(std::int32_t fd)
+{
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+    RemoveFd(fd);
 }
 
 }

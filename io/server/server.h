@@ -5,7 +5,6 @@
 #endif
 
 #include "io/common/poller.h"
-#include "io/common/fd_desc.h"
 #include "common/buffer.h"
 #include <cstdint>
 #include <poll.h>
@@ -20,8 +19,8 @@ class Server : public Poller
 public:
     static const constexpr std::size_t BUFFER_SIZE = 1024;
 
-    Server(int port, std::size_t connection_backlog, std::size_t max_connections)
-        : Poller(max_connections)
+    Server(int port, std::size_t connection_backlog)
+        : Poller()
         , port_(port)
         , connection_backlog_(connection_backlog)
         , server_fd_(-1)
@@ -33,7 +32,7 @@ public:
 
     ~Server()
     {
-        Shutdown();
+        ShutdownAll();
     }
 
     bool is_ok() const { return is_ok_; }
@@ -47,7 +46,7 @@ public:
     *           Poller::OnEOF(client_fd)
     *       Poller::OnEOF(server_fd)
     */
-    void Shutdown();
+    void ShutdownAll();
 
 private:
     void init();
@@ -87,27 +86,16 @@ private:
     */
     void OnWrite(std::int32_t fd) override {}
 
-   /*
-    *   OnHangup
-    *       if server_fd:
-    *           NOT_POSSIBLE
-    *       else:
-    *           Poller::OnHangup()
-    */
-    void OnHangup(std::int32_t fd) override;
+    void OnInvalidFd(std::int32_t fd) override;
 
-   /*
-    *   OnPollnval:
-    *       If server_fd:
-    *           NOT_POSSIBLE
-    *       else:
-    *           Poller::OnPollnval
-    */
-    void OnPollnval(std::int32_t fd) override;
+    void OnConnectionAborted(std::int32_t fd) override;
+
+    void Shutdown(std::int32_t fd);
 
     const std::int32_t port_;
     const std::size_t connection_backlog_;
     std::int32_t server_fd_;
+    std::vector<std::int32_t> client_fds_;
     Buffer buffer_;
     bool is_ok_;
     sockaddr_in address_;

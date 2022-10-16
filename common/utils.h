@@ -46,6 +46,19 @@ template<typename T>
 bool pperror(T rv)
 { return pperror(rv, ""); }
 
+template<typename Container, typename Cond>
+void remove_if(Container& container, Cond&& cond)
+{
+    for (auto it = container.begin(); it != container.end(); ++it)
+    {
+        if (cond(*it))
+        {
+            container.erase(it);
+            break;
+        }
+    }
+}
+
 }
 
 inline const char* get_local_time()

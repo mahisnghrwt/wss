@@ -8,14 +8,14 @@ void signal_handler(int signal)
 {
     printf("singal caught(%d)", signal);
     if (server != nullptr)
-        server->Shutdown();
+        server->ShutdownAll();
 }
 
 int main(int argc, char const* argv[])
 {
     signal(SIGINT, signal_handler);
 
-    server = std::make_unique<wss::Server>(10555, 3, 5);
+    server = std::make_unique<wss::Server>(10555, 3);
     
     server->Run();
 

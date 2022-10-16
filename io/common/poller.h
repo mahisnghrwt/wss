@@ -21,9 +21,7 @@ public:
         READ = 1,
         WRITE = 2
     };
-
-    Poller() = delete;
-
+    
     Poller()
         : timeout_(-1)
         , safe_to_update_fd_(true)
