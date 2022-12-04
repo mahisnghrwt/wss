@@ -59,8 +59,9 @@ inline const char* get_local_time()
     return str;
 }
 
-#define LOG(...) \
-    printf("%9s | %s | ", get_local_time(), __FUNCTION__); \
-    printf(__VA_ARGS__);
+#define LOG(...) { \
+    printf("%9s [%s] ", get_local_time(), __PRETTY_FUNCTION__); \
+    printf(__VA_ARGS__); \
+    }
 
 }
