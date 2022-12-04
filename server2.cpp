@@ -46,18 +46,6 @@ Server2::Server2(Port port)
     AddFd(server_fd_, Event::READ);
 }
 
-void Server2::AddFd(Fd fd, Event event)
-{
-    short flags = 0;
-    if (event & Event::READ)
-        flags |= POLLIN;
-    if (event & Event::WRITE)
-        flags |= POLLOUT;
-    flags |= POLLRDHUP;
-
-    fd_list_.Add(fd, flags);
-}
-
 void Server2::Run()
 {
     assert(is_ok_);
@@ -131,6 +119,18 @@ void Server2::Shutdown()
 {
     // TODO: shutdown properly
     LOG("%s", "shutting down"); 
+}
+
+void Server2::AddFd(Fd fd, Event event)
+{
+    short flags = 0;
+    if (event & Event::READ)
+        flags |= POLLIN;
+    if (event & Event::WRITE)
+        flags |= POLLOUT;
+    flags |= POLLRDHUP;
+
+    fd_list_.Add(fd, flags);
 }
 
 void Server2::OnNewConnection(Fd fd)
