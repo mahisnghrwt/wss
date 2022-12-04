@@ -94,12 +94,12 @@ void Client2::Run()
                 OnWriteData(pfd.fd);
             }
 
-            if (pfd.revents & (POLLHUP || POLLRDHUP))
+            if (pfd.revents & (POLLHUP | POLLRDHUP))
             {
                 Shutdown();
             }
 
-            if (pfd.revents & (POLLERR || POLLPRI))
+            if (pfd.revents & (POLLERR | POLLPRI))
             {
                 assert(false);
             }           
