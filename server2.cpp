@@ -56,18 +56,15 @@ void Server2::AddFd(Fd fd, Event event)
     flags |= POLLRDHUP;
 
     fd_list_.Add(fd, flags);
-
-    LOG("fd(%d) polling for event(%d)\n", fd, event);
 }
 
 void Server2::Run()
 {
     assert(is_ok_);
+    auto& fds = fd_list_.fds();
 
     while(true)
     {
-        auto& fds = fd_list_.fds();
-
         auto events = poll(fds.data(), fds.size(), -1); // infinite timeouts
         if (pperror(events))
             return;
@@ -76,7 +73,6 @@ void Server2::Run()
         if (events == 0)
         {
             assert(false);
-            return;
         }
 
         LOG("%d events received\n", events);
@@ -85,10 +81,11 @@ void Server2::Run()
         for (auto it = fds.begin(); it != fds.end() && events > 0; ++it)
         {
             auto& pfd = *it;
-            LogPollEvents(pfd);
 
             if (pfd.revents == 0)
                 continue;
+
+            LogPollEvents(pfd);
                 
             if (pfd.revents & POLLIN)
             {
@@ -102,22 +99,22 @@ void Server2::Run()
                 }
             }
 
-            if (pfd.revents & POLLERR || pfd.events & POLLPRI)
+            if (pfd.revents & POLLHUP)
             {
                 assert(false);
             }
 
-            if (pfd.revents & POLLHUP && !(pfd.revents & POLLIN))
+            if (pfd.events & POLLRDHUP && !(pfd.revents & POLLIN))
             {
-                assert(false);
-            }
-
-            if (pfd.events & POLLRDHUP)
-            {
-                assert(false);
+                // assert(false);
             }
 
             if (pfd.revents & POLLNVAL)
+            {
+                assert(false);
+            }
+
+            if (pfd.revents & POLLERR || pfd.events & POLLPRI)
             {
                 assert(false);
             }                
@@ -128,6 +125,12 @@ void Server2::Run()
 
         fd_list_.Unlock();
     }
+}
+
+void Server2::Shutdown()
+{
+    // TODO: shutdown properly
+    LOG("%s", "shutting down"); 
 }
 
 void Server2::OnNewConnection(Fd fd)
@@ -143,7 +146,7 @@ void Server2::OnNewConnection(Fd fd)
 
 void Server2::OnData(Fd fd)
 {
-    static char buffer[READ_BUFFER_SIZE];
+    static char buffer[READ_BUFFER_SIZE] = {'\0'};
 
     auto bytes_read = read(fd, buffer, READ_BUFFER_SIZE - 1);
     pperror(bytes_read, "=> error reading from a client fd");
@@ -151,16 +154,23 @@ void Server2::OnData(Fd fd)
     assert(bytes_read >= 0);
     if (bytes_read == 0)
     {
-        LOG("fd(%d) EOF received", fd);
-        return;
+        LOG("fd(%d) EOF received\n", fd);
+        OnClientDisconnected(fd);
     }
     else
     {
+        LOG("bytes_read(%ld)\n", bytes_read);
         buffer[bytes_read] = '\0';
-        LOG("%s", buffer);
+        LOG("%s\n", buffer);
+        memset(buffer, '\0', bytes_read);
     }
+}
 
-    memset(buffer, '\0', bytes_read);
+void Server2::OnClientDisconnected(Fd fd)
+{
+    LOG("Disconnecting fd(%d)\n", fd);
+    close(fd);
+    fd_list_.Remove(fd);
 }
 
 }

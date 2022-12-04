@@ -135,9 +135,9 @@ void Client2::OnData(Fd fd)
         {
             assert(false);
         }
-        else if (available_cap > 0)
+
+        if (len > 0)
         {
-            assert(len > 0);
             write_buffer_[len - 1] = '\n';
         }
 

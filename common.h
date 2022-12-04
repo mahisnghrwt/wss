@@ -25,9 +25,10 @@ class FdList
 public:
     void Add(Fd fd, short flags)
     {
-        auto task = [&]() {
+        auto task = [fd, flags, this]() {
             assert(safe_);
             fds_.emplace_back(pollfd{fd, flags, 0});
+            LOG("fd(%d) flags(%d) added\n", fd, flags);
         };
 
         if (safe_)
@@ -44,11 +45,29 @@ public:
     {
         auto task = [this, fd]() {
             assert(safe_);
-            std::remove_if(fds_.begin(), fds_.end(), [fd](const auto& f) {
+            // auto it = std::remove_if(fds_.begin(), fds_.end(), [fd](const auto& f) {
+            //     if (f.fd == fd)
+            //         return true;
+            //     return false;
+            // });
+
+            auto it = std::find_if(fds_.begin(), fds_.end(), [fd](const auto& f) {
                 if (f.fd == fd)
                     return true;
                 return false;
             });
+
+            if (it != fds_.end())
+            {
+                it->fd = -1;
+            }
+            else
+            {
+                assert(false);
+            }
+
+
+            LOG("fd(%d) removed\n", fd);
         };
 
         if (safe_)
@@ -63,7 +82,7 @@ public:
 
     void Update(Fd fd, short flags)
     {
-        auto task = [&]() {
+        auto task = [fd, flags, this]() {
             assert(safe_);
             auto it = std::find_if(fds_.begin(), fds_.end(), [fd](const auto& f) {
                 if (f.fd == fd)
@@ -74,6 +93,7 @@ public:
             if (it != fds_.end())
             {
                 it->events = flags;
+                LOG("fd(%d) flags(%d) updated\n", fd, flags);
             }
             else
             {
@@ -121,7 +141,7 @@ inline void LogPollEvents(const pollfd& p)
     CHECK_EVENT(POLLERR);
     CHECK_EVENT(POLLHUP);
     CHECK_EVENT(POLLNVAL);
-    LOG("%s", str.c_str());
+    LOG("%s\n", str.c_str());
 #undef CHECK_EVENT
 }
 
