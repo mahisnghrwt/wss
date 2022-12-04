@@ -22,7 +22,7 @@ private:
     void AddFd(Fd fd, Event event);
     void OnNewConnection(Fd fd); // TODO: rename to OnClientConnected
     void OnData(Fd fd);
-    void OnClientDisconnected(Fd fd);
+    void RemoveFd(Fd fd);
 
     const Port port_;
     Fd server_fd_;

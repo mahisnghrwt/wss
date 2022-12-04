@@ -80,6 +80,28 @@ public:
         }
     }
 
+    void RemoveAll()
+    {
+        auto task = [this]() {
+            assert(safe_);
+            for (auto& pfd : fds_)
+            {
+                auto fd = pfd.fd;
+                pfd.fd = -1;
+                LOG("fd(%d) removed\n", fd);
+            }            
+        };
+
+        if (safe_)
+        {
+            task();
+        }
+        else
+        {
+            tasks_.emplace_back(std::move(task));
+        }
+    }
+
     void Update(Fd fd, short flags)
     {
         auto task = [fd, flags, this]() {

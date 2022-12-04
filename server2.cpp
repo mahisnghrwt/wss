@@ -117,8 +117,13 @@ void Server2::Run()
 
 void Server2::Shutdown()
 {
-    // TODO: shutdown properly
-    LOG("%s", "shutting down"); 
+    LOG("%s\n", "shutting down, closing all sockets");
+
+    for (auto& pfd : fd_list_.fds())
+    {
+        close(pfd.fd);
+    }
+    fd_list_.RemoveAll();
 }
 
 void Server2::AddFd(Fd fd, Event event)
@@ -155,7 +160,7 @@ void Server2::OnData(Fd fd)
     if (bytes_read == 0)
     {
         LOG("fd(%d) EOF received\n", fd);
-        OnClientDisconnected(fd);
+        RemoveFd(fd);
     }
     else
     {
@@ -166,9 +171,9 @@ void Server2::OnData(Fd fd)
     }
 }
 
-void Server2::OnClientDisconnected(Fd fd)
+void Server2::RemoveFd(Fd fd)
 {
-    LOG("Disconnecting fd(%d)\n", fd);
+    LOG("closing fd(%d)\n", fd);
     close(fd);
     fd_list_.Remove(fd);
 }
