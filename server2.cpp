@@ -9,16 +9,16 @@ Server2::Server2(Port port)
     : port_(port)
 {
     server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (pperror(server_fd_, "=> error creating socket"))
+    if (is_error(server_fd_, "=> error creating socket"))
     {
         is_ok_ = false;
         return;
     }
 
-    if (pperror(fcntl(server_fd_, F_SETFD, O_NONBLOCK), "=> couldn't set non-blocking flag on server's socket"))
+    if (is_error(fcntl(server_fd_, F_SETFD, O_NONBLOCK), "=> couldn't set non-blocking flag on server's socket"))
     {
         is_ok_ = false;
-        if (pperror(close(server_fd_), "=> error closing server fd"))
+        if (is_error(close(server_fd_), "=> error closing server fd"))
             return;
     }
 
@@ -26,18 +26,18 @@ Server2::Server2(Port port)
     address_.sin_addr.s_addr = INADDR_ANY;
     address_.sin_port = htons(port_);
 
-    if (pperror(bind(server_fd_, (sockaddr*)&address_, sizeof(address_)), "=> couldn't bind the socket"))
+    if (is_error(bind(server_fd_, (sockaddr*)&address_, sizeof(address_)), "=> couldn't bind the socket"))
     {
         is_ok_ = false;
-        if (pperror(close(server_fd_), "=> error closing server fd"))
+        if (is_error(close(server_fd_), "=> error closing server fd"))
             return;
     }
     
     const std::int32_t backlog = 999;
-    if (pperror(listen(server_fd_, backlog), "=> couldn't listen on socket"))
+    if (is_error(listen(server_fd_, backlog), "=> couldn't listen on socket"))
     {
         is_ok_ = false;
-        if (pperror(close(server_fd_), "=> error closing server fd"))
+        if (is_error(close(server_fd_), "=> error closing server fd"))
             return;
     }
 
@@ -54,7 +54,7 @@ void Server2::Run()
     while(true)
     {
         auto events = poll(fds.data(), fds.size(), -1); // infinite timeouts
-        if (pperror(events))
+        if (is_error(events))
             return;
 
         // timeout    
@@ -142,7 +142,7 @@ void Server2::OnNewConnection(Fd fd)
 {
     socklen_t addrlen = sizeof(address_);
     auto client_fd = accept4(server_fd_, (sockaddr*)&address_, &addrlen, SOCK_NONBLOCK);
-    if (!pperror(client_fd, "=> error accpeting a new connection"))
+    if (!is_error(client_fd, "=> error accpeting a new connection"))
     {
         LOG("new client connected\n");
         AddFd(client_fd, Event::READ);
@@ -154,7 +154,7 @@ void Server2::OnData(Fd fd)
     static char buffer[READ_BUFFER_SIZE] = {'\0'};
 
     auto bytes_read = read(fd, buffer, READ_BUFFER_SIZE - 1);
-    pperror(bytes_read, "=> error reading from a client fd");
+    is_error(bytes_read, "=> error reading from a client fd");
 
     assert(bytes_read >= 0);
     if (bytes_read == 0)

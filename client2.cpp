@@ -10,7 +10,7 @@ Client2::Client2(Port port)
     : port_(port)
 {
     fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (pperror(fd_))
+    if (is_error(fd_))
         return;
 
 	sockaddr_in serv_addr;
@@ -19,10 +19,10 @@ Client2::Client2(Port port)
 
     const std::string ip("127.0.0.1");
 
-    if (pperror(inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr)))
+    if (is_error(inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr)))
         return;
 
-    if (pperror(connect(fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)), "couldn't connect to the server"))
+    if (is_error(connect(fd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)), "couldn't connect to the server"))
     {
         return;
     }
@@ -32,7 +32,7 @@ Client2::Client2(Port port)
         is_ok_ = true;
     }
 
-    if (pperror(fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK), "couldn't set the nonblocking flag"))
+    if (is_error(fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK), "couldn't set the nonblocking flag"))
         return;
 
     // O_NONBLOCK flag not required for STDIN?
@@ -64,7 +64,7 @@ void Client2::Run()
         auto& fds = fd_list_.fds();
 
         auto events = poll(fds.data(), fds.size(), -1); // infinite timeouts
-        if (pperror(events))
+        if (is_error(events))
             return;
 
         if (events == 0) // timeout
@@ -147,7 +147,7 @@ void Client2::OnData(Fd fd)
 
         auto bytes_read = read(STDIN_FILENO, write_buffer_ + len, available_cap);
         LOG("%d bytes read\n", bytes_read);
-        if (pperror(bytes_read))
+        if (is_error(bytes_read))
         {
             Shutdown();
             return;
@@ -172,7 +172,7 @@ void Client2::OnData(Fd fd)
             return;
         }
 
-        if (pperror(bytes_read))
+        if (is_error(bytes_read))
         {
             Shutdown();
         }
@@ -196,7 +196,7 @@ void Client2::OnWriteData(Fd fd)
     {
         auto bytes_written = write(fd, write_buffer_, len);
         LOG("fd(%d) (%d) bytes written\n", fd, bytes_written);
-        if (pperror(bytes_written, "error writing to the socket_fd"))
+        if (is_error(bytes_written, "error writing to the socket_fd"))
         {
             Shutdown();
             return;
