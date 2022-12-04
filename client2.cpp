@@ -67,11 +67,9 @@ void Client2::Run()
         if (pperror(events))
             return;
 
-        // timeout    
-        if (events == 0)
+        if (events == 0) // timeout
         {
             assert(false);
-            return;
         }
 
         LOG("%d events received\n", events);
@@ -96,20 +94,15 @@ void Client2::Run()
                 OnWriteData(pfd.fd);
             }
 
-            if (pfd.revents & POLLERR || pfd.events & POLLPRI)
+            if (pfd.revents & (POLLHUP || POLLRDHUP))
             {
-                assert(false);
+                Shutdown();
             }
 
-            if (pfd.revents & POLLHUP && !(pfd.revents & POLLIN))
+            if (pfd.revents & (POLLERR || POLLPRI))
             {
                 assert(false);
-            }
-
-            if (pfd.revents & POLLRDHUP && !(pfd.revents & POLLIN))
-            {
-                assert(false);
-            }
+            }           
 
             if (pfd.revents & POLLNVAL)
             {
@@ -124,10 +117,20 @@ void Client2::Run()
     }
 }
 
+void Client2::Shutdown()
+{
+    LOG("%s\n", "shutting down, closing connection");
+
+    close(fd_);
+    fd_list_.Remove(fd_);
+
+    fd_list_.Remove(STDIN_FILENO);
+}
+
 void Client2::OnData(Fd fd)
 {
     LOG("fd(%d) called\n", fd);
-    if (fd == 0)
+    if (fd == STDIN_FILENO)
     {
         auto len = strlen(write_buffer_);
         assert(len <= WRITE_BUFFER_SIZE);
@@ -159,8 +162,17 @@ void Client2::OnData(Fd fd)
     }
     else
     {
+        assert(fd == fd_);
+
         auto bytes_read = read(0, read_buffer_, READ_BUFFER_SIZE - 1);
-        if (pperror(bytes_read) || bytes_read == 0)
+        
+        if (bytes_read == 0) // EOF
+        {
+            LOG("%s\n", "EOF received");
+            return;
+        }
+
+        if (pperror(bytes_read))
         {
             Shutdown();
         }
