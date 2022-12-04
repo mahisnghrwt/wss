@@ -8,6 +8,8 @@
 #include <locale>
 #include <stdlib.h>
 
+namespace wss {
+
 template<typename StrT, typename... Ts>
 void Panic(int err_num, StrT format_str, Ts&&... args)
 {
@@ -33,7 +35,6 @@ void Panic(StrT&& format_str)
     Panic(err_num, proxy_str, "");
 }
 
-namespace wss::utils {
 
 template<typename T, typename StrT>
 bool pperror(T rv, StrT&& msg)
@@ -45,8 +46,6 @@ bool pperror(T rv, StrT&& msg)
 template<typename T>
 bool pperror(T rv)
 { return pperror(rv, ""); }
-
-}
 
 inline const char* get_local_time()
 {
@@ -63,3 +62,5 @@ inline const char* get_local_time()
 #define LOG(...) \
     printf("%9s | %s | ", get_local_time(), __FUNCTION__); \
     printf(__VA_ARGS__);
+
+}
