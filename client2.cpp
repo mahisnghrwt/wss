@@ -80,10 +80,11 @@ void Client2::Run()
         for (auto it = fds.begin(); it != fds.end() && events > 0; ++it)
         {
             auto& pfd = *it;
-            LogPollEvents(pfd);
 
             if (pfd.revents == 0)
                 continue;
+
+            LogPollEvents(pfd);
                 
             if (pfd.revents & POLLIN)
             {
@@ -105,7 +106,7 @@ void Client2::Run()
                 assert(false);
             }
 
-            if (pfd.revents & POLLHUP)
+            if (pfd.revents & POLLRDHUP && !(pfd.revents & POLLIN))
             {
                 assert(false);
             }

@@ -19,7 +19,7 @@ public:
     void Shutdown();
 
 private:
-    void AddFd(Fd fd, Event event);
+    void AddFd(Fd fd, Event event); // TODO: remove this
     void OnNewConnection(Fd fd); // TODO: rename to OnClientConnected
     void OnData(Fd fd);
     void RemoveFd(Fd fd);
