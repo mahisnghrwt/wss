@@ -92,17 +92,17 @@ void Server2::Run()
                 assert(false);
             }
 
-            if (pfd.events & POLLRDHUP && !(pfd.revents & POLLIN))
-            {
-                // assert(false);
-            }
+            // if (pfd.revents & POLLRDHUP)
+            // {
+            //     assert(false);
+            // }
 
             if (pfd.revents & POLLNVAL)
             {
                 assert(false);
             }
 
-            if (pfd.revents & POLLERR || pfd.events & POLLPRI)
+            if (pfd.revents & (POLLERR | POLLPRI))
             {
                 assert(false);
             }                
