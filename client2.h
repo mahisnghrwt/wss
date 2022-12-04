@@ -16,7 +16,7 @@ class Client2
 public:
     Client2(Port port);
     void Run();
-    void Shutdown() { LOG("%s", "shutting down"); }
+    void Shutdown();
 
 private:
     void AddFd(Fd fd, Event event);
